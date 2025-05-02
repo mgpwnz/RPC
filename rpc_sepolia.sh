@@ -10,7 +10,9 @@ GETH_DATA_DIR="$DATA_DIR/geth-data"
 TEKU_DATA_DIR="$DATA_DIR/teku-data"
 JWT_DIR="$DATA_DIR/jwtsecret"
 JWT_FILE="$JWT_DIR/jwtsecret"
-
+# Warning
+echo -e "\n📣 Don't forget to delete old databases:\n  rm -rf $DATA_DIR/teku-data/beacon/db\n  rm -rf $DATA_DIR/geth-data"
+read
 # === Prompt for custom ports ===
 read -rp "🛠️  Enter Geth HTTP RPC port (default: 8545): " HTTP_PORT
 HTTP_PORT="${HTTP_PORT:-8545}"
@@ -161,8 +163,6 @@ start_stack() {
 }
 
 # --- Main ---
-echo -e "\n📣 Не забудьте перед перезапуском удалить старые базы:\n  rm -rf $DATA_DIR/teku-data/beacon/db\n  rm -rf $DATA_DIR/geth-data"
-read
 install_docker
 prompt_wipe_geth
 prompt_wipe_teku
