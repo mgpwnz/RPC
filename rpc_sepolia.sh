@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# === Sepolia Full-Node + Beacon Setup Script (v2) ===
+# === Sepolia Full-Node + Beacon Setup Script (v3) ===
+# Adds customizable HTTP RPC port (default: 8545)
 
 DATA_DIR="$HOME/sepolia-node"
 COMPOSE_FILE="$DATA_DIR/docker-compose.yml"
@@ -9,6 +10,14 @@ GETH_DATA_DIR="$DATA_DIR/geth-data"
 TEKU_DATA_DIR="$DATA_DIR/teku-data"
 JWT_DIR="$DATA_DIR/jwtsecret"
 JWT_FILE="$JWT_DIR/jwtsecret"
+
+# === Prompt for custom HTTP RPC port ===
+read -rp "🛠️  Enter HTTP RPC port (default: 8545): " HTTP_PORT
+HTTP_PORT="${HTTP_PORT:-8545}"
+
+default_ws_port=8546
+
+echo "Using HTTP RPC on port: $HTTP_PORT"
 
 install_docker() {
   if ! command -v docker &>/dev/null; then
@@ -52,6 +61,7 @@ generate_jwt() {
 write_compose() {
   mkdir -p "$DATA_DIR"
   cat > "$COMPOSE_FILE" <<EOF
+version: '3.8'
 services:
   geth:
     image: ethereum/client-go:stable
@@ -70,20 +80,20 @@ services:
       - --maxpeers=50
       - --http
       - --http.addr=0.0.0.0
-      - --http.port=8545
+      - --http.port=$HTTP_PORT
       - --http.api=eth,net,web3,engine
       - --http.vhosts=*
       - --ws
       - --ws.addr=0.0.0.0
-      - --ws.port=8546
+      - --ws.port=$default_ws_port
       - --ws.api=eth,net,web3
       - --authrpc.addr=0.0.0.0
       - --authrpc.port=8551
       - --authrpc.jwtsecret=/root/.ethereum/jwtsecret
       - --authrpc.vhosts=*
     ports:
-      - "8545:8545"
-      - "8546:8546"
+      - "$HTTP_PORT:$HTTP_PORT"
+      - "$default_ws_port:$default_ws_port"
       - "8551:8551"
       - "30303:30303"
       - "30303:30303/udp"
@@ -147,4 +157,4 @@ generate_jwt
 write_compose
 start_stack
 
-echo -e "\n📣 Не забудьте перед перезапуском видалити старі бази:\n  rm -rf $DATA_DIR/teku-data/beacon/db\n  rm -rf $DATA_DIR/geth-data\n"
+echo -e "\n📣 Не забудьте перед перезапуском видалить старые базы:\n  rm -rf $DATA_DIR/teku-data/beacon/db\n  rm -rf $DATA_DIR/geth-data"
