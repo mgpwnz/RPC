@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# === Sepolia Full-Node + Beacon Setup Script (v3) ===
-# Adds customizable HTTP RPC port (default: 8545)
+# === Sepolia Full-Node + Beacon Setup Script (v5) ===
+# Adds customizable HTTP, WS, authRPC, P2P (transport), and Teku REST API ports
 
 DATA_DIR="$HOME/sepolia-node"
 COMPOSE_FILE="$DATA_DIR/docker-compose.yml"
@@ -11,13 +11,23 @@ TEKU_DATA_DIR="$DATA_DIR/teku-data"
 JWT_DIR="$DATA_DIR/jwtsecret"
 JWT_FILE="$JWT_DIR/jwtsecret"
 
-# === Prompt for custom HTTP RPC port ===
-read -rp "🛠️  Enter HTTP RPC port (default: 8545): " HTTP_PORT
+# === Prompt for custom ports ===
+read -rp "🛠️  Enter Geth HTTP RPC port (default: 8545): " HTTP_PORT
 HTTP_PORT="${HTTP_PORT:-8545}"
+read -rp "🛠️  Enter Geth WS RPC port (default: 8546): " WS_PORT
+WS_PORT="${WS_PORT:-8546}"
+read -rp "🛠️  Enter Geth authRPC port (default: 8551): " AUTHRPC_PORT
+AUTHRPC_PORT="${AUTHRPC_PORT:-8551}"
+read -rp "🛠️  Enter Geth P2P (transport) port (default: 30303): " P2P_PORT
+P2P_PORT="${P2P_PORT:-30303}"
+read -rp "🛠️  Enter Teku REST API port (default: 5051): " TEKU_REST_PORT
+TEKU_REST_PORT="${TEKU_REST_PORT:-5051}"
 
-default_ws_port=8546
-
-echo "Using HTTP RPC on port: $HTTP_PORT"
+echo "Using Geth HTTP RPC port: $HTTP_PORT"
+echo "Using Geth WS RPC port: $WS_PORT"
+echo "Using Geth authRPC port: $AUTHRPC_PORT"
+echo "Using Geth P2P (transport) port: $P2P_PORT"
+echo "Using Teku REST API port: $TEKU_REST_PORT"
 
 install_docker() {
   if ! command -v docker &>/dev/null; then
@@ -80,23 +90,24 @@ services:
       - --maxpeers=50
       - --http
       - --http.addr=0.0.0.0
-      - --http.port=$HTTP_PORT
+      - --http.port=${HTTP_PORT}
       - --http.api=eth,net,web3,engine
       - --http.vhosts=*
       - --ws
       - --ws.addr=0.0.0.0
-      - --ws.port=$default_ws_port
+      - --ws.port=${WS_PORT}
       - --ws.api=eth,net,web3
       - --authrpc.addr=0.0.0.0
-      - --authrpc.port=8551
+      - --authrpc.port=${AUTHRPC_PORT}
       - --authrpc.jwtsecret=/root/.ethereum/jwtsecret
       - --authrpc.vhosts=*
+      - --port=${P2P_PORT}
     ports:
-      - "$HTTP_PORT:$HTTP_PORT"
-      - "$default_ws_port:$default_ws_port"
-      - "8551:8551"
-      - "30303:30303"
-      - "30303:30303/udp"
+      - "${HTTP_PORT}:${HTTP_PORT}"
+      - "${WS_PORT}:${WS_PORT}"
+      - "${AUTHRPC_PORT}:${AUTHRPC_PORT}"
+      - "${P2P_PORT}:${P2P_PORT}"
+      - "${P2P_PORT}:${P2P_PORT}/udp"
     volumes:
       - ./geth-data:/root/.ethereum
       - ./jwtsecret/jwtsecret:/root/.ethereum/jwtsecret:ro
@@ -124,16 +135,16 @@ services:
           --data-path=/data \
           --logging=INFO \
           --ee-jwt-secret-file=/data/jwtsecret \
-          --ee-endpoint=http://geth:8551 \
+          --ee-endpoint=http://geth:${AUTHRPC_PORT} \
           --p2p-peer-lower-bound=20 \
           --rest-api-enabled \
           --rest-api-interface=0.0.0.0 \
-          --rest-api-port=5051 \
+          --rest-api-port=${TEKU_REST_PORT} \
           --metrics-enabled \
           --metrics-interface=0.0.0.0 \
           --ignore-weak-subjectivity-period-enabled
     ports:
-      - "5051:5051"
+      - "${TEKU_REST_PORT}:${TEKU_REST_PORT}"
     networks:
       - sepolia-net
 
@@ -157,4 +168,4 @@ generate_jwt
 write_compose
 start_stack
 
-echo -e "\n📣 Не забудьте перед перезапуском видалить старые базы:\n  rm -rf $DATA_DIR/teku-data/beacon/db\n  rm -rf $DATA_DIR/geth-data"
+echo -e "\n📣 Не забудьте перед перезапуском удалить старые базы:\n  rm -rf $DATA_DIR/teku-data/beacon/db\n  rm -rf $DATA_DIR/geth-data"
