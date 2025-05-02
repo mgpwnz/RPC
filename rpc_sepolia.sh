@@ -161,6 +161,8 @@ start_stack() {
 }
 
 # --- Main ---
+echo -e "\n📣 Не забудьте перед перезапуском удалить старые базы:\n  rm -rf $DATA_DIR/teku-data/beacon/db\n  rm -rf $DATA_DIR/geth-data"
+read
 install_docker
 prompt_wipe_geth
 prompt_wipe_teku
@@ -168,4 +170,4 @@ generate_jwt
 write_compose
 start_stack
 
-echo -e "\n📣 Не забудьте перед перезапуском удалить старые базы:\n  rm -rf $DATA_DIR/teku-data/beacon/db\n  rm -rf $DATA_DIR/geth-data"
+
