@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# === Sepolia Full-Node + Beacon Setup Script (v5) ===
-# Adds customizable HTTP, WS, authRPC, P2P (transport), and Teku REST API ports
+# === Sepolia Full-Node + Beacon Setup Script (v6) ===
+# Adds customizable HTTP, WS, authRPC, P2P, and Teku REST API ports
 
 DATA_DIR="$HOME/sepolia-node"
 COMPOSE_FILE="$DATA_DIR/docker-compose.yml"
@@ -10,9 +10,11 @@ GETH_DATA_DIR="$DATA_DIR/geth-data"
 TEKU_DATA_DIR="$DATA_DIR/teku-data"
 JWT_DIR="$DATA_DIR/jwtsecret"
 JWT_FILE="$JWT_DIR/jwtsecret"
-# Warning
-echo -e "\n📣 Don't forget to delete old databases:\n  rm -rf $DATA_DIR/teku-data/beacon/db\n  rm -rf $DATA_DIR/geth-data"
-read
+
+# Warning for old databases
+echo -e "\n📣 Don't forget to delete old databases before running:\n  rm -rf $DATA_DIR/teku-data/beacon/db\n  rm -rf $DATA_DIR/geth-data"
+read -rp "Press Enter to continue..."
+
 # === Prompt for custom ports ===
 read -rp "🛠️  Enter Geth HTTP RPC port (default: 8545): " HTTP_PORT
 HTTP_PORT="${HTTP_PORT:-8545}"
@@ -20,7 +22,7 @@ read -rp "🛠️  Enter Geth WS RPC port (default: 8546): " WS_PORT
 WS_PORT="${WS_PORT:-8546}"
 read -rp "🛠️  Enter Geth authRPC port (default: 8551): " AUTHRPC_PORT
 AUTHRPC_PORT="${AUTHRPC_PORT:-8551}"
-read -rp "🛠️  Enter Geth P2P (transport) port (default: 30303): " P2P_PORT
+read -rp "🛠️  Enter Geth P2P port (default: 30303): " P2P_PORT
 P2P_PORT="${P2P_PORT:-30303}"
 read -rp "🛠️  Enter Teku REST API port (default: 5051): " TEKU_REST_PORT
 TEKU_REST_PORT="${TEKU_REST_PORT:-5051}"
@@ -28,7 +30,7 @@ TEKU_REST_PORT="${TEKU_REST_PORT:-5051}"
 echo "Using Geth HTTP RPC port: $HTTP_PORT"
 echo "Using Geth WS RPC port: $WS_PORT"
 echo "Using Geth authRPC port: $AUTHRPC_PORT"
-echo "Using Geth P2P (transport) port: $P2P_PORT"
+echo "Using Geth P2P port: $P2P_PORT"
 echo "Using Teku REST API port: $TEKU_REST_PORT"
 
 install_docker() {
@@ -39,8 +41,7 @@ install_docker() {
     sudo mkdir -p /etc/apt/keyrings
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
       | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-    echo "deb [signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-      $(lsb_release -cs) stable" \
+    echo "deb [signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
       | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
     sudo apt-get update
     sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
@@ -73,7 +74,6 @@ generate_jwt() {
 write_compose() {
   mkdir -p "$DATA_DIR"
   cat > "$COMPOSE_FILE" <<EOF
-version: '3.8'
 services:
   geth:
     image: ethereum/client-go:stable
@@ -142,6 +142,7 @@ services:
           --rest-api-enabled \
           --rest-api-interface=0.0.0.0 \
           --rest-api-port=${TEKU_REST_PORT} \
+          --rest-api-host-allowlist="*" \
           --metrics-enabled \
           --metrics-interface=0.0.0.0 \
           --ignore-weak-subjectivity-period-enabled
@@ -169,5 +170,3 @@ prompt_wipe_teku
 generate_jwt
 write_compose
 start_stack
-
-
