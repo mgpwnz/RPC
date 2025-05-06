@@ -34,10 +34,10 @@ fi
 # 3) Restart Teku container
 echo "🚀 Restarting Teku container..."
 cd "$DATA_DIR"
-docker compose stop sepolia-teku
+docker compose stop teku
 # pull latest image in case there's an update
 docker compose pull teku
-docker compose up -d sepolia-teku
+docker compose up -d teku
 
 echo "✅ Teku container restarted successfully."
 
