@@ -1,16 +1,55 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Sepolia Sync Monitor Script (v3)
-# Continuously reports Geth (execution) and Teku (beacon) sync status.
-# Usage: ./sepolia_sync_monitor.sh [RPC_URL] [TEKU_URL] [INTERVAL]
-# Defaults: RPC_URL=http://localhost:8545, TEKU_URL=http://localhost:5051, INTERVAL=10
+# Sepolia Sync Monitor Script (v4)
+# Allows piping via curl | bash -s -- RPC_URL [TEKU_URL] [INTERVAL]
+# Usage:
+#   curl -sL https://.../sepolia_sync_monitor.sh | bash -s -- RPC_URL [TEKU_URL] [INTERVAL]
+# Examples:
+#   # RPC_URL + default TEKU_URL + default INTERVAL
+#   | bash -s -- http://localhost:8545
+#   # RPC_URL + INTERVAL (numeric) + default TEKU_URL
+#   | bash -s -- http://localhost:8545 5
+#   # RPC_URL + TEKU_URL + INTERVAL
+#   | bash -s -- http://localhost:8545 http://localhost:5051 5
 
-RPC_URL="${1:-http://localhost:8545}"
-TEKU_URL="${2:-http://localhost:5051}"
-INTERVAL="${3:-10}"
+# Default values
+default_rpc="http://localhost:8545"
+default_teku="http://localhost:5051"
+default_interval=10
+
+# Parse args
+total_args=$#
+
+# Initialize with defaults
+RPC_URL="$default_rpc"
+TEKU_URL="$default_teku"
+INTERVAL=$default_interval
+
+if (( total_args == 1 )); then
+  RPC_URL="$1"
+elif (( total_args == 2 )); then
+  # If second arg is integer => INTERVAL
+  if [[ "$2" =~ ^[0-9]+$ ]]; then
+    RPC_URL="$1"
+    INTERVAL=$2
+  else
+    RPC_URL="$1"
+    TEKU_URL="$2"
+  fi
+elif (( total_args >= 3 )); then
+  RPC_URL="$1"
+  TEKU_URL="$2"
+  INTERVAL=$3
+fi
 
 enabled_geth="true"
+
+echo "🔍 Monitoring Sepolia nodes:"
+echo "   Geth RPC:    $RPC_URL"
+echo "   Teku REST:   $TEKU_URL"
+echo "   Interval(s): $INTERVAL"
+echo
 
 # Function to check Geth sync status
 check_geth() {
@@ -29,7 +68,7 @@ check_geth() {
   cur_hex=$(jq -r '.result.currentBlock // "0x0"' <<<"$resp" 2>/dev/null)
   max_hex=$(jq -r '.result.highestBlock  // "0x0"' <<<"$resp" 2>/dev/null)
 
-  # If highestBlock is zero, skipping calculation
+  # If highestBlock is zero, skip calculation
   if [[ "$max_hex" == "0x0" ]]; then
     echo "$(date '+%F %T')  ⏳ Geth: no sync data available"
     return
@@ -38,16 +77,20 @@ check_geth() {
   # Convert hex (0x...) to decimal
   cur=$((cur_hex))
   max=$((max_hex))
-  rem=$((max - cur))
+  rem=$((max > cur ? max - cur : 0))
 
-  # Calculate percentage
-  pct=$(awk "BEGIN{printf \"%.2f\", ($max>0 ? $cur/$max*100 : 0)}")
+  # Calculate percentage safely
+  if (( max > 0 )); then
+    pct=$(awk "BEGIN{printf \"%.2f\", cur/max*100}")
+  else
+    pct="0.00"
+  fi
   echo "$(date '+%F %T')  ⏳ Geth: $pct% synced ($cur/$max), remaining blocks: $rem"
 }
 
 # Function to check Teku sync status
 check_teku() {
-  data=$(curl -s "$TEKU_URL/eth/v1/node/syncing")
+  data=$(curl -s "$TEKU_URL/eth/v1/node/syncing" 2>/dev/null)
   head_slot=$(jq -r '.data.head_slot // empty' <<<"$data")
   sync_dist=$(jq -r '.data.sync_distance // empty' <<<"$data")
 
@@ -69,4 +112,3 @@ while true; do
   echo
   sleep "$INTERVAL"
 done
-
