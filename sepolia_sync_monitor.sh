@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Check dependencies
+for cmd in curl jq awk; do
+  if ! command -v "$cmd" &>/dev/null; then
+    echo "Error: '$cmd' is required but not installed. Please install it and retry." >&2
+    exit 1
+  fi
+done
+
 # Sepolia Sync Monitor Script (v6)
 # Pipeable: curl ... | bash -s -- RPC_URL [TEKU_URL] [INTERVAL]
 # Usage:
