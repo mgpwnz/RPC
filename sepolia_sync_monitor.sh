@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Sepolia Sync Monitor Script (v5)
-# Allows piping via curl | bash -s -- RPC_URL [TEKU_URL] [INTERVAL]
+# Sepolia Sync Monitor Script (v6)
+# Pipeable: curl ... | bash -s -- RPC_URL [TEKU_URL] [INTERVAL]
 # Usage:
-#   curl -sL https://.../sepolia_sync_monitor.sh | bash -s -- RPC_URL [TEKU_URL] [INTERVAL]
+#   curl -sL <url>/sepolia_sync_monitor.sh | bash -s -- RPC_URL [TEKU_URL] [INTERVAL]
 # Examples:
-#   | bash -s -- http://localhost:8545
-#   | bash -s -- http://localhost:8545 5
-#   | bash -s -- http://localhost:8545 http://localhost:5051 5
+#   ... | bash -s -- http://localhost:8545
+#   ... | bash -s -- http://localhost:8545 5
+#   ... | bash -s -- http://localhost:8545 http://localhost:5051 5
 
-# Default values
+# Defaults
 default_rpc="http://localhost:8545"
 default_teku="http://localhost:5051"
 default_interval=10
 
-# Parse args
+# Parse arguments
 total_args=$#
 RPC_URL="$default_rpc"
 TEKU_URL="$default_teku"
@@ -37,6 +37,10 @@ elif (( total_args >= 3 )); then
   INTERVAL=$3
 fi
 
+# Strip trailing slashes
+RPC_URL=${RPC_URL%/}
+TEKU_URL=${TEKU_URL%/}
+
 enabled_geth="true"
 
 echo "🔍 Monitoring Sepolia nodes:"
@@ -45,50 +49,45 @@ echo "   Teku REST:   $TEKU_URL"
 echo "   Interval(s): $INTERVAL"
 echo
 
-# Function to check Geth sync status
+# Check Geth sync status
+enable_formatter=false
 check_geth() {
   resp=$(curl -s "$RPC_URL" \
     -H "Content-Type: application/json" \
     --data '{"jsonrpc":"2.0","method":"eth_syncing","params":[],"id":1}')
 
-  # If result is boolean false, node is fully synced
   if jq -e '.result == false' <<<"$resp" >/dev/null 2>&1; then
     echo "$(date '+%F %T')  🚀 Geth: fully synced"
     enabled_geth="false"
     return
   fi
 
-  # Extract hex fields, defaulting to 0x0 if missing
   cur_hex=$(jq -r '.result.currentBlock // "0x0"' <<<"$resp" 2>/dev/null)
   max_hex=$(jq -r '.result.highestBlock  // "0x0"' <<<"$resp" 2>/dev/null)
 
-  # Skip if no sync data
   if [[ "$max_hex" == "0x0" ]]; then
     echo "$(date '+%F %T')  ⏳ Geth: no sync data available"
     return
   fi
 
-  # Convert hex (0x...) to decimal
   cur=$((cur_hex))
   max=$((max_hex))
   rem=$(( max - cur ))
 
-  # Calculate percentage using shell variables
-  if (( max > 0 )); then
-    pct=$(awk "BEGIN{printf \"%.2f\", ${cur}/${max}*100}")
-  else
-    pct="0.00"
-  fi
-
+  pct=$(awk "BEGIN{printf \"%.2f\", ( ($max>0)? $cur/$max*100 : 0 ) }")
   echo "$(date '+%F %T')  ⏳ Geth: $pct% synced ($cur/$max), remaining blocks: $rem"
 }
 
-# Function to check Teku sync status
+# Check Teku sync status
 check_teku() {
-  # Use Host header to satisfy Teku host-allowlist
-  data=$(curl -s -H "Host: localhost" "$TEKU_URL/eth/v1/node/syncing" 2>/dev/null)
-  head_slot=$(jq -r '.data.head_slot // empty' <<<"$data")
-  sync_dist=$(jq -r '.data.sync_distance // empty' <<<"$data")
+  raw=$(curl -s -H "Host: localhost" "$TEKU_URL/eth/v1/node/syncing" 2>/dev/null)
+  if ! jq -e . >/dev/null <<<"$raw" 2>&1; then
+    echo "$(date '+%F %T')  ❌ Teku: invalid JSON response"
+    return
+  fi
+
+  head_slot=$(jq -r '.data.head_slot // empty' <<<"$raw")
+  sync_dist=$(jq -r '.data.sync_distance // empty' <<<"$raw")
 
   if [[ -z "$sync_dist" ]]; then
     echo "$(date '+%F %T')  ❌ Teku: no sync data available"
