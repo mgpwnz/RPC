@@ -85,7 +85,8 @@ check_geth() {
 
 # Function to check Teku sync status
 check_teku() {
-  data=$(curl -s "$TEKU_URL/eth/v1/node/syncing" 2>/dev/null)
+  # Use Host header to satisfy Teku host-allowlist
+  data=$(curl -s -H "Host: localhost" "$TEKU_URL/eth/v1/node/syncing" 2>/dev/null)
   head_slot=$(jq -r '.data.head_slot // empty' <<<"$data")
   sync_dist=$(jq -r '.data.sync_distance // empty' <<<"$data")
 
