@@ -45,10 +45,13 @@ setup_dirs() {
   mkdir -p "${GETH_DATA_DIR}" "${TEKU_DATA_DIR}" "${JWT_DIR}"
 }
 
-# --- добавляем ---
 echo ">>> Создаём поддиректорию logs для Teku…"
 mkdir -p "${TEKU_DATA_DIR}/logs"
 chmod 777 "${TEKU_DATA_DIR}/logs"
+
+echo ">>> Создаём каталоги для slash protection…"
+mkdir -p "${TEKU_DATA_DIR}/validator/slashprotection"
+chmod -R 777 "${TEKU_DATA_DIR}/validator"
 
 
 generate_jwt() {
