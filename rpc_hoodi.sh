@@ -117,6 +117,7 @@ services:
       - ${JWT_DIR}:/data/jwt:ro
     ports:
       - "8008:8008"   # metrics
+      - "5051:5051"   # REST API
     command: >
       --network=hoodi
       --data-path=/opt/teku/data
@@ -124,6 +125,11 @@ services:
       --ee-jwt-secret-file=/data/jwt/jwtsecret
       --metrics-enabled
       --metrics-port=8008
+      --rest-api-enabled=true
+      --rest-api-interface=0.0.0.0
+      --rest-api-port=5051
+      --rest-api-host-allowlist=*  # або "localhost,127.0.0.1" для безпечнішого доступу
+
 EOF
 }
 
