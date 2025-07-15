@@ -9,6 +9,8 @@ JWT_DIR="${DATA_DIR}/jwt"
 JWT_FILE="${JWT_DIR}/jwtsecret"
 COMPOSE_FILE="${DATA_DIR}/docker-compose.yml"
 
+# === Функции ===
+
 install_docker() {
   if ! command -v docker &>/dev/null; then
     echo ">>> Устанавливаем Docker..."
@@ -23,7 +25,7 @@ install_docker() {
     sudo apt-get update
     sudo apt-get install -y docker-ce docker-ce-cli containerd.io
   else
-    echo ">>> Docker установлен."
+    echo ">>> Docker уже установлен."
   fi
 }
 
@@ -36,43 +38,43 @@ install_docker_compose() {
       -o "${DOCKER_CONFIG}/cli-plugins/docker-compose"
     chmod +x "${DOCKER_CONFIG}/cli-plugins/docker-compose"
   else
-    echo ">>> Docker Compose установлен."
+    echo ">>> Docker Compose уже установлен."
   fi
 }
 
 setup_dirs() {
-  echo ">>> Создаём каталоги: geth, teku, jwt..."
-  mkdir -p "${GETH_DATA_DIR}" "${TEKU_DATA_DIR}" "${JWT_DIR}"
+  echo ">>> Создаём каталоги данных и логов..."
+  mkdir -p \
+    "${GETH_DATA_DIR}" \
+    "${TEKU_DATA_DIR}/data" \
+    "${TEKU_DATA_DIR}/logs" \
+    "${TEKU_DATA_DIR}/validator/slashprotection" \
+    "${TEKU_DATA_DIR}/beacon" \
+    "${JWT_DIR}"
+
+  # Даём полные права, чтобы Teku мог создавать файлы
+  chmod -R 777 "${TEKU_DATA_DIR}"
 }
-
-echo ">>> Создаём поддиректорию logs для Teku…"
-mkdir -p "${TEKU_DATA_DIR}/logs"
-chmod 777 "${TEKU_DATA_DIR}/logs"
-
-echo ">>> Создаём каталоги для slash protection…"
-mkdir -p "${TEKU_DATA_DIR}/validator/slashprotection"
-chmod -R 777 "${TEKU_DATA_DIR}/validator"
-
 
 generate_jwt() {
   if [ ! -f "${JWT_FILE}" ]; then
     echo ">>> Генерируем JWT‑секрет..."
     openssl rand -hex 32 > "${JWT_FILE}"
   else
-    echo ">>> JWT‑секрет уже есть."
+    echo ">>> JWT‑секрет уже существует."
   fi
 }
 
 download_snapshot() {
-  echo ">>> Скачиваем снапшот…"
+  echo ">>> Получаем и распаковываем последний снапшот Geth..."
   BLOCK_NUMBER=$(curl -s https://snapshots.ethpandaops.io/hoodi/geth/latest)
-  echo "    Последний снапшот: block $BLOCK_NUMBER"
+  echo "    → Последний снапшот: block $BLOCK_NUMBER"
   curl -sL "https://snapshots.ethpandaops.io/hoodi/geth/${BLOCK_NUMBER}/snapshot.tar.zst" \
     | tar -I zstd -xvf - -C "${GETH_DATA_DIR}"
 }
 
 create_compose() {
-  echo ">>> Пишем docker-compose.yml без Validator API…"
+  echo ">>> Пишем docker-compose.yml..."
   cat > "${COMPOSE_FILE}" <<EOF
 services:
   geth:
@@ -108,7 +110,10 @@ services:
     depends_on:
       - geth
     volumes:
-      - ${TEKU_DATA_DIR}:/opt/teku/data
+      - ${TEKU_DATA_DIR}/data:/opt/teku/data
+      - ${TEKU_DATA_DIR}/logs:/opt/teku/data/logs
+      - ${TEKU_DATA_DIR}/validator:/opt/teku/data/validator
+      - ${TEKU_DATA_DIR}/beacon:/opt/teku/data/beacon
       - ${JWT_DIR}:/data/jwt:ro
     ports:
       - "8008:8008"   # metrics
@@ -122,14 +127,13 @@ services:
 EOF
 }
 
-
 start_node() {
-  echo ">>> Запускаем ноду…"
+  echo ">>> Поднимаем контейнеры..."
   docker compose -f "${COMPOSE_FILE}" up -d
-  echo ">>> Логи geth: docker logs -f geth-hoodi"
+  echo ">>> Всё запущено! Логи geth: docker logs -f geth-hoodi"
 }
 
-# === Main ===
+# === Основной запуск ===
 install_docker
 install_docker_compose
 setup_dirs
@@ -138,4 +142,4 @@ download_snapshot
 create_compose
 start_node
 
-echo "🎉 Полная нода Hoodi запущена."
+echo "🎉 Полная нода Hoodi (geth+teku) запущена и синхронизируется."
