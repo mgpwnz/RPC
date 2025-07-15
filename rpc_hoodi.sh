@@ -64,19 +64,16 @@ generate_jwt() {
 
 download_snapshot() {
   echo ">>> Определяем номер последнего снапшота и скачиваем его…"
-  # берём номер последнего снапшота
   BLOCK_NUMBER=$(curl -s https://snapshots.ethpandaops.io/hoodi/geth/latest)
   echo "    Latest snapshot block: $BLOCK_NUMBER"
-  # скачиваем и распаковываем на лету
   curl -sL "https://snapshots.ethpandaops.io/hoodi/geth/${BLOCK_NUMBER}/snapshot.tar.zst" \
     | tar -I zstd -xvf - -C "${GETH_DATA_DIR}"
-  echo ">>> Снапшот распакован в ${GETH_DATA_DIR}"  
+  echo ">>> Снапшот распакован в ${GETH_DATA_DIR}"
 }
 
 create_compose() {
   echo ">>> Пишем docker-compose.yml…"
   cat > "${COMPOSE_FILE}" <<EOF
-version: '3.8'
 services:
   geth:
     image: ethereum/client-go:stable
@@ -111,35 +108,26 @@ services:
     depends_on:
       - geth
     volumes:
-      - ${TEKU_DATA_DIR}:/opt/teku
+      - ${TEKU_DATA_DIR}:/opt/teku/data
       - ${JWT_DIR}:/data/jwt:ro
     ports:
       - "9000:9000"
       - "8008:8008"
     command: >
       --network=hoodi
-      --data-path=/opt/teku
+      --data-path=/opt/teku/data
       --eth1-endpoint=http://geth:8545
       --engine-jwt=/data/jwt/jwtsecret
       --validator-api-enabled
       --validator-api-port=9000
       --metrics-enabled
       --metrics-port=8008
-
-volumes:
-  geth-data: {}
-  teku-data: {}
-  jwt: {}
 EOF
 }
 
 start_node() {
   echo ">>> Запускаем ноду (docker compose up -d)…"
-  if command -v docker-compose &>/dev/null; then
-    docker-compose -f "${COMPOSE_FILE}" up -d
-  else
-    docker compose -f "${COMPOSE_FILE}" up -d
-  fi
+  docker compose -f "${COMPOSE_FILE}" up -d
   echo ">>> Нода запущена! Логи geth: docker logs -f geth-hoodi"
 }
 
@@ -148,7 +136,7 @@ install_docker
 install_docker_compose
 setup_dirs
 generate_jwt
-download_snapshot    # :contentReference[oaicite:0]{index=0}
+download_snapshot
 create_compose
 start_node
 
