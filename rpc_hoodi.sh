@@ -69,7 +69,7 @@ download_snapshot() {
 }
 
 create_compose() {
-  echo ">>> Пишем docker-compose.yml…"
+  echo ">>> Пишем docker-compose.yml без Validator API…"
   cat > "${COMPOSE_FILE}" <<EOF
 services:
   geth:
@@ -108,19 +108,17 @@ services:
       - ${TEKU_DATA_DIR}:/opt/teku/data
       - ${JWT_DIR}:/data/jwt:ro
     ports:
-      - "9000:9000"
-      - "8008:8008"
+      - "8008:8008"   # metrics
     command: >
       --network=hoodi
       --data-path=/opt/teku/data
       --ee-endpoint=http://geth:8551
       --ee-jwt-secret-file=/data/jwt/jwtsecret
-      --validator-api-enabled
-      --validator-api-port=9000
       --metrics-enabled
       --metrics-port=8008
 EOF
 }
+
 
 start_node() {
   echo ">>> Запускаем ноду…"
