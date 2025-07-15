@@ -9,29 +9,21 @@ JWT_DIR="${DATA_DIR}/jwt"
 JWT_FILE="${JWT_DIR}/jwtsecret"
 COMPOSE_FILE="${DATA_DIR}/docker-compose.yml"
 
-# === Функции ===
-
 install_docker() {
   if ! command -v docker &>/dev/null; then
     echo ">>> Устанавливаем Docker..."
     sudo apt-get update
-    sudo apt-get install -y \
-      apt-transport-https \
-      ca-certificates \
-      curl \
-      gnupg \
-      lsb-release
+    sudo apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
       | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
     echo \
       "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] \
-      https://download.docker.com/linux/ubuntu \
-      $(lsb_release -cs) stable" \
+      https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
       | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
     sudo apt-get update
     sudo apt-get install -y docker-ce docker-ce-cli containerd.io
   else
-    echo ">>> Docker уже установлен, пропускаем."
+    echo ">>> Docker установлен."
   fi
 }
 
@@ -44,12 +36,12 @@ install_docker_compose() {
       -o "${DOCKER_CONFIG}/cli-plugins/docker-compose"
     chmod +x "${DOCKER_CONFIG}/cli-plugins/docker-compose"
   else
-    echo ">>> Docker Compose уже есть, пропускаем."
+    echo ">>> Docker Compose установлен."
   fi
 }
 
 setup_dirs() {
-  echo ">>> Создаём каталоги: geth, teku, jwt..."
+  echo ">>> Создаём каталоги..."
   mkdir -p "${GETH_DATA_DIR}" "${TEKU_DATA_DIR}" "${JWT_DIR}"
 }
 
@@ -58,17 +50,16 @@ generate_jwt() {
     echo ">>> Генерируем JWT‑секрет..."
     openssl rand -hex 32 > "${JWT_FILE}"
   else
-    echo ">>> JWT‑секрет уже есть, пропускаем."
+    echo ">>> JWT‑секрет уже есть."
   fi
 }
 
 download_snapshot() {
-  echo ">>> Определяем номер последнего снапшота и скачиваем его…"
+  echo ">>> Скачиваем снапшот…"
   BLOCK_NUMBER=$(curl -s https://snapshots.ethpandaops.io/hoodi/geth/latest)
-  echo "    Latest snapshot block: $BLOCK_NUMBER"
+  echo "    Последний снапшот: block $BLOCK_NUMBER"
   curl -sL "https://snapshots.ethpandaops.io/hoodi/geth/${BLOCK_NUMBER}/snapshot.tar.zst" \
     | tar -I zstd -xvf - -C "${GETH_DATA_DIR}"
-  echo ">>> Снапшот распакован в ${GETH_DATA_DIR}"
 }
 
 create_compose() {
@@ -116,8 +107,8 @@ services:
     command: >
       --network=hoodi
       --data-path=/opt/teku/data
-      --eth1-endpoint=http://geth:8545
-      --engine-jwt=/data/jwt/jwtsecret
+      --ee-endpoint=http://geth:8551
+      --ee-jwt-secret-file=/data/jwt/jwtsecret
       --validator-api-enabled
       --validator-api-port=9000
       --metrics-enabled
@@ -126,12 +117,12 @@ EOF
 }
 
 start_node() {
-  echo ">>> Запускаем ноду (docker compose up -d)…"
+  echo ">>> Запускаем ноду…"
   docker compose -f "${COMPOSE_FILE}" up -d
-  echo ">>> Нода запущена! Логи geth: docker logs -f geth-hoodi"
+  echo ">>> Логи geth: docker logs -f geth-hoodi"
 }
 
-# === Основной запуск ===
+# === Main ===
 install_docker
 install_docker_compose
 setup_dirs
@@ -140,4 +131,4 @@ download_snapshot
 create_compose
 start_node
 
-echo "🎉 Готово! Полная нода Hoodi поднята и начинает синхронизацию."
+echo "🎉 Полная нода Hoodi запущена."
