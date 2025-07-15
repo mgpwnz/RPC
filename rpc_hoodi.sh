@@ -41,9 +41,15 @@ install_docker_compose() {
 }
 
 setup_dirs() {
-  echo ">>> Создаём каталоги..."
+  echo ">>> Создаём каталоги: geth, teku, jwt..."
   mkdir -p "${GETH_DATA_DIR}" "${TEKU_DATA_DIR}" "${JWT_DIR}"
 }
+
+# --- добавляем ---
+echo ">>> Создаём поддиректорию logs для Teku…"
+mkdir -p "${TEKU_DATA_DIR}/logs"
+chmod 777 "${TEKU_DATA_DIR}/logs"
+
 
 generate_jwt() {
   if [ ! -f "${JWT_FILE}" ]; then
