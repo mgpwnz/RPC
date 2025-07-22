@@ -1,125 +1,106 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# === Variables ===
+# === Параметры ===
 DATA_DIR="$HOME/sepolia-node"
 COMPOSE_FILE="$DATA_DIR/docker-compose.yml"
+
+# Папки для bind‑mount’ов
 GETH_DATA="$DATA_DIR/geth-data"
-TEKU_DATA="$DATA_DIR/teku-data"
+BEACON_DATA="$DATA_DIR/beacon-data"
 SECRETS_DIR="$DATA_DIR/secrets"
 JWT_FILE="$SECRETS_DIR/jwt.hex"
 
-# Default ports (можно править здесь или экспортить перед запуском)
-HTTP_PORT="${HTTP_PORT:-8545}"
-WS_PORT="${WS_PORT:-8546}"
-AUTHRPC_PORT="${AUTHRPC_PORT:-8551}"
-P2P_PORT="${P2P_PORT:-30303}"
-TEKU_REST_PORT="${TEKU_REST_PORT:-5051}"
+# 1) Создаём структуру
+mkdir -p "$GETH_DATA" "$BEACON_DATA" "$SECRETS_DIR"
 
-# 1) Создаём директории
-mkdir -p \
-  "$GETH_DATA" \
-  "$TEKU_DATA" \
-  "$SECRETS_DIR"
-
-# 2) Генерируем JWT, если ещё нет
+# 2) Генерируем JWT, если его нет
 if [[ ! -f "$JWT_FILE" ]]; then
   openssl rand -hex 32 | tr -d '\n' > "$JWT_FILE"
   chmod 640 "$JWT_FILE"
+  echo "✅ JWT secret создан: $JWT_FILE"
 fi
 
-# 3) Пишем docker-compose.yml «вшитый» тут же
-cat > "$COMPOSE_FILE" <<EOF
+# 3) Пишем docker-compose.yml (точно из вашего файла) :contentReference[oaicite:3]{index=3}
+cat > "$COMPOSE_FILE" <<'EOF'
 version: '3.8'
+
 networks:
   sepolia-net:
-    driver: bridge
 
 services:
   geth:
-    image: ethereum/client-go:stable
-    container_name: sepolia-geth
-    restart: unless-stopped
-    ulimits:
-      nofile:
-        soft: 65536
-        hard: 65536
+    image: ethereum/client-go:v1.15.11
+    networks:
+      sepolia-net:
+        aliases:
+          - geth
+    volumes:
+      - ./geth-data:/data
+      - ./secrets/jwt.hex:/var/lib/secrets/jwt.hex:ro
     command:
       - --sepolia
-      - --datadir=/root/.ethereum
-      - --syncmode=full
-      - --gcmode=full
-      - --cache=4096
-      - --maxpeers=50
       - --http
       - --http.addr=0.0.0.0
-      - --http.port=${HTTP_PORT}
-      - --http.api=eth,net,web3,engine
-      - --http.vhosts=*
-      - --http.corsdomain=*
-      - --ws
-      - --ws.addr=0.0.0.0
-      - --ws.port=${WS_PORT}
-      - --ws.api=eth,net,web3
+      - --http.port=8545
+      - --http.api=eth,net,engine,admin
       - --authrpc.addr=0.0.0.0
-      - --authrpc.port=${AUTHRPC_PORT}
+      - --authrpc.port=8551
+      - --http.vhosts=*
       - --authrpc.vhosts=*
-      - --authrpc.jwtsecret=/root/.ethereum/jwtsecret
-      - --port=${P2P_PORT}
+      - --http.corsdomain=*
+      - --authrpc.jwtsecret=/var/lib/secrets/jwt.hex
+      - --datadir=/data
     ports:
-      - "${HTTP_PORT}:${HTTP_PORT}"
-      - "${WS_PORT}:${WS_PORT}"
-      - "${AUTHRPC_PORT}:${AUTHRPC_PORT}"
-      - "${P2P_PORT}:${P2P_PORT}"
-      - "${P2P_PORT}:${P2P_PORT}/udp"
-    volumes:
-      - ./geth-data:/root/.ethereum
-      - ./secrets/jwt.hex:/root/.ethereum/jwtsecret:ro
-    networks:
-      - sepolia-net
-
-  teku:
-    image: consensys/teku:latest
-    container_name: sepolia-teku
+      - "8545:8545"
+      - "8551:8551"
+      - "30303:30303"
+      - "30303:30303/udp"
     restart: unless-stopped
+
+  beacon:
+    image: gcr.io/prysmaticlabs/prysm/beacon-chain:stable
     depends_on:
       - geth
-    user: root
-    volumes:
-      - ./teku-data:/data
-      - ./secrets/jwt.hex:/data/jwtsecret:ro
-    entrypoint:
-      - /bin/sh
-      - -c
-      - |
-        mkdir -p /data/logs && \
-        exec teku \
-          --network=sepolia \
-          --checkpoint-sync-url=https://sepolia.checkpoint-sync.ethpandaops.io \
-          --data-path=/data \
-          --logging=INFO \
-          --ee-jwt-secret-file=/data/jwtsecret \
-          --ee-endpoint=http://geth:${AUTHRPC_PORT} \
-          --p2p-peer-lower-bound=20 \
-          --rest-api-enabled \
-          --rest-api-interface=0.0.0.0 \
-          --rest-api-port=${TEKU_REST_PORT} \
-          --rest-api-host-allowlist="*" \
-          --metrics-enabled \
-          --metrics-interface=0.0.0.0 \
-          --ignore-weak-subjectivity-period-enabled
-    ports:
-      - "${TEKU_REST_PORT}:${TEKU_REST_PORT}"
     networks:
       - sepolia-net
+    volumes:
+      - ./beacon-data:/data
+      - ./secrets/jwt.hex:/jwt.hex:ro
+    command:
+      - --sepolia
+      - --http-modules=beacon,config,node,validator
+      - --rpc-host=0.0.0.0
+      - --rpc-port=4000
+      - --grpc-gateway-host=0.0.0.0
+      - --grpc-gateway-port=3500
+      - --datadir=/data
+      - --execution-endpoint=http://geth:8551
+      - --jwt-secret=/jwt.hex
+      - --checkpoint-sync-url=https://checkpoint-sync.sepolia.ethpandaops.io/
+      - --genesis-beacon-api-url=https://checkpoint-sync.sepolia.ethpandaops.io/
+      - --accept-terms-of-use
+      - --p2p-host-ip=0.0.0.0
+      - --p2p-udp-port=13000
+      - --p2p-tcp-port=13000
+    ports:
+      - "4000:4000"
+      - "3500:3500"
+      - "13000:13000"
+      - "13000:13000/udp"
+    restart: unless-stopped
+
+# убрали секцию volumes из оригинала
 EOF
+
+echo "✅ Записан $COMPOSE_FILE"
 
 # 4) Запускаем стек
 cd "$DATA_DIR"
 docker compose up -d
 
-echo -e "\n✅ Полная установка завершена!"
-echo "  • Данные Geth   → $GETH_DATA"
-echo "  • Данные Teku   → $TEKU_DATA"
-echo "  • JWT secret    → $JWT_FILE"
-echo "  • Compose файл  → $COMPOSE_FILE"
+echo -e "\n🚀 Sepolia full‑нода (Geth) + Beacon подняты!"
+echo "  • Geth data   → $GETH_DATA"
+echo "  • Beacon data → $BEACON_DATA"
+echo "  • JWT secret  → $JWT_FILE"
+echo "  • Compose     → $COMPOSE_FILE"
