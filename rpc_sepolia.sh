@@ -1,79 +1,40 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# === Sepolia Full-Node + Beacon Setup Script (v6) ===
-# Adds customizable HTTP, WS, authRPC, P2P, and Teku REST API ports
-
+# === Variables ===
 DATA_DIR="$HOME/sepolia-node"
 COMPOSE_FILE="$DATA_DIR/docker-compose.yml"
-GETH_DATA_DIR="$DATA_DIR/geth-data"
-TEKU_DATA_DIR="$DATA_DIR/teku-data"
-JWT_DIR="$DATA_DIR/jwtsecret"
-JWT_FILE="$JWT_DIR/jwtsecret"
+GETH_DATA="$DATA_DIR/geth-data"
+TEKU_DATA="$DATA_DIR/teku-data"
+SECRETS_DIR="$DATA_DIR/secrets"
+JWT_FILE="$SECRETS_DIR/jwt.hex"
 
-# Warning for old databases
-echo -e "\n📣 Don't forget to delete old databases before running:\n  rm -rf $DATA_DIR/teku-data/beacon/db\n  rm -rf $DATA_DIR/geth-data"
-read -rp "Press Enter to continue..."
-
-# === Prompt for custom ports ===
-read -rp "🛠️  Enter Geth HTTP RPC port (default: 8545): " HTTP_PORT
+# Default ports (можно править здесь или экспортить перед запуском)
 HTTP_PORT="${HTTP_PORT:-8545}"
-read -rp "🛠️  Enter Geth WS RPC port (default: 8546): " WS_PORT
 WS_PORT="${WS_PORT:-8546}"
-read -rp "🛠️  Enter Geth authRPC port (default: 8551): " AUTHRPC_PORT
 AUTHRPC_PORT="${AUTHRPC_PORT:-8551}"
-read -rp "🛠️  Enter Geth P2P port (default: 30303): " P2P_PORT
 P2P_PORT="${P2P_PORT:-30303}"
-read -rp "🛠️  Enter Teku REST API port (default: 5051): " TEKU_REST_PORT
 TEKU_REST_PORT="${TEKU_REST_PORT:-5051}"
 
-echo "Using Geth HTTP RPC port: $HTTP_PORT"
-echo "Using Geth WS RPC port: $WS_PORT"
-echo "Using Geth authRPC port: $AUTHRPC_PORT"
-echo "Using Geth P2P port: $P2P_PORT"
-echo "Using Teku REST API port: $TEKU_REST_PORT"
+# 1) Создаём директории
+mkdir -p \
+  "$GETH_DATA" \
+  "$TEKU_DATA" \
+  "$SECRETS_DIR"
 
-install_docker() {
-  if ! command -v docker &>/dev/null; then
-    echo "🔄 Installing Docker & Compose..."
-    sudo apt-get update
-    sudo apt-get install -y ca-certificates curl gnupg lsb-release
-    sudo mkdir -p /etc/apt/keyrings
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-      | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-    echo "deb [signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
-      | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-    sudo apt-get update
-    sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-    sudo usermod -aG docker "$USER"
-    echo "✅ Docker & Compose installed."
-  else
-    echo "ℹ️ Docker already installed."
-  fi
-}
+# 2) Генерируем JWT, если ещё нет
+if [[ ! -f "$JWT_FILE" ]]; then
+  openssl rand -hex 32 | tr -d '\n' > "$JWT_FILE"
+  chmod 640 "$JWT_FILE"
+fi
 
-prompt_wipe_geth() {
-  if [[ -d "$GETH_DATA_DIR/geth/chaindata" ]]; then
-    read -rp "🗑️ Wipe old Geth data? [Y/n]: " ans
-    [[ ! "$ans" =~ ^[Nn] ]] && rm -rf "$GETH_DATA_DIR"
-  fi
-}
+# 3) Пишем docker-compose.yml «вшитый» тут же
+cat > "$COMPOSE_FILE" <<EOF
+version: '3.8'
+networks:
+  sepolia-net:
+    driver: bridge
 
-prompt_wipe_teku() {
-  if [[ -d "$TEKU_DATA_DIR/beacon/db" ]]; then
-    read -rp "🗑️ Wipe old Teku data? [Y/n]: " ans
-    [[ ! "$ans" =~ ^[Nn] ]] && rm -rf "$TEKU_DATA_DIR"
-  fi
-}
-
-generate_jwt() {
-  mkdir -p "$JWT_DIR"
-  [[ -f "$JWT_FILE" ]] || openssl rand -hex 32 > "$JWT_FILE"
-}
-
-write_compose() {
-  mkdir -p "$DATA_DIR"
-  cat > "$COMPOSE_FILE" <<EOF
 services:
   geth:
     image: ethereum/client-go:stable
@@ -95,14 +56,15 @@ services:
       - --http.port=${HTTP_PORT}
       - --http.api=eth,net,web3,engine
       - --http.vhosts=*
+      - --http.corsdomain=*
       - --ws
       - --ws.addr=0.0.0.0
       - --ws.port=${WS_PORT}
       - --ws.api=eth,net,web3
       - --authrpc.addr=0.0.0.0
       - --authrpc.port=${AUTHRPC_PORT}
-      - --authrpc.jwtsecret=/root/.ethereum/jwtsecret
       - --authrpc.vhosts=*
+      - --authrpc.jwtsecret=/root/.ethereum/jwtsecret
       - --port=${P2P_PORT}
     ports:
       - "${HTTP_PORT}:${HTTP_PORT}"
@@ -112,7 +74,7 @@ services:
       - "${P2P_PORT}:${P2P_PORT}/udp"
     volumes:
       - ./geth-data:/root/.ethereum
-      - ./jwtsecret/jwtsecret:/root/.ethereum/jwtsecret:ro
+      - ./secrets/jwt.hex:/root/.ethereum/jwtsecret:ro
     networks:
       - sepolia-net
 
@@ -125,7 +87,7 @@ services:
     user: root
     volumes:
       - ./teku-data:/data
-      - ./jwtsecret/jwtsecret:/data/jwtsecret:ro
+      - ./secrets/jwt.hex:/data/jwtsecret:ro
     entrypoint:
       - /bin/sh
       - -c
@@ -150,23 +112,14 @@ services:
       - "${TEKU_REST_PORT}:${TEKU_REST_PORT}"
     networks:
       - sepolia-net
-
-networks:
-  sepolia-net:
-    driver: bridge
 EOF
-}
 
-start_stack() {
-  cd "$DATA_DIR"
-  docker compose up -d
-  echo "✅ Containers started."
-}
+# 4) Запускаем стек
+cd "$DATA_DIR"
+docker compose up -d
 
-# --- Main ---
-install_docker
-prompt_wipe_geth
-prompt_wipe_teku
-generate_jwt
-write_compose
-start_stack
+echo -e "\n✅ Полная установка завершена!"
+echo "  • Данные Geth   → $GETH_DATA"
+echo "  • Данные Teku   → $TEKU_DATA"
+echo "  • JWT secret    → $JWT_FILE"
+echo "  • Compose файл  → $COMPOSE_FILE"
