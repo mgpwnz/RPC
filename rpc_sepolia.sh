@@ -80,14 +80,14 @@ services:
       - --checkpoint-sync-url=https://checkpoint-sync.sepolia.ethpandaops.io/
       - --genesis-beacon-api-url=https://checkpoint-sync.sepolia.ethpandaops.io/
       - --accept-terms-of-use
-      - --p2p-host-ip=0.0.0.0
-      - --p2p-udp-port=13000
-      - --p2p-tcp-port=13000
+      #- --p2p-host-ip=0.0.0.0
+      #- --p2p-udp-port=13000
+      #- --p2p-tcp-port=13000
     ports:
       - "4000:4000"
       - "3500:3500"
-      - "13000:13000"
-      - "13000:13000/udp"
+      #- "13000:13000"
+      #- "13000:13000/udp"
     restart: unless-stopped
 
 # убрали секцию volumes из оригинала
