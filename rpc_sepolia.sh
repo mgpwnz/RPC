@@ -16,8 +16,8 @@ mkdir -p "$GETH_DATA" "$BEACON_DATA" "$SECRETS_DIR"
 
 # 2) Генерируем JWT, если его нет
 if [[ ! -f "$JWT_FILE" ]]; then
-  openssl rand -hex 32 | tr -d '\n' > "$JWT_FILE"
-  chmod 640 "$JWT_FILE"
+  openssl rand -hex 32 > "$JWT_FILE"
+  chmod 644 "$JWT_FILE"
   echo "✅ JWT secret создан: $JWT_FILE"
 fi
 
@@ -30,14 +30,14 @@ networks:
 
 services:
   geth:
-    image: ethereum/client-go:v1.15.11
+    image: ethereum/client-go:v1.16.4
     networks:
       sepolia-net:
         aliases:
           - geth
     volumes:
-      - ./geth-data:/data
-      - ./secrets/jwt.hex:/var/lib/secrets/jwt.hex:ro
+      - ${PWD}/geth-data:/data
+      - ${PWD}/secrets/jwt.hex:/var/lib/secrets/jwt.hex:ro
     command:
       - --sepolia
       - --http
@@ -65,8 +65,8 @@ services:
     networks:
       - sepolia-net
     volumes:
-      - ./beacon-data:/data
-      - ./secrets/jwt.hex:/jwt.hex:ro
+      - ${PWD}/beacon-data:/data
+      - ${PWD}/secrets/jwt.hex:/jwt.hex:ro
     command:
       - --sepolia
       - --http-modules=beacon,config,node,validator
