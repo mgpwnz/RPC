@@ -30,7 +30,7 @@ networks:
 
 services:
   geth:
-    image: ethereum/client-go:v1.16.4
+    image: ethereum/client-go:stable
     networks:
       sepolia-net:
         aliases:
@@ -59,7 +59,7 @@ services:
     restart: unless-stopped
 
   beacon:
-    image: gcr.io/prysmaticlabs/prysm/beacon-chain:stable
+    image: gcr.io/prysmaticlabs/prysm/beacon-chain:v6.1.2
     depends_on:
       - geth
     networks:
@@ -80,6 +80,7 @@ services:
       - --checkpoint-sync-url=https://checkpoint-sync.sepolia.ethpandaops.io/
       - --genesis-beacon-api-url=https://checkpoint-sync.sepolia.ethpandaops.io/
       - --accept-terms-of-use
+      - --subscribe-all-data-subnets
     ports:
       - "4000:4000"
       - "3500:3500"
